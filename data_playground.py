@@ -4,19 +4,6 @@
 # # ASSR: Automatic Stuttered Speech Recoginition
 
 #%%
-# import sys
-# !conda install tensorflow
-# !conda activate tensorflow
-# !pip install --upgrade librosa
-# !conda install tqdm
-# !pip install pydub
-# !pip install ffmpeg
-# !pip install SpeechRecognition
-# !pip install wavio
-# !pip install waveread
-
-
-#%%
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
@@ -386,217 +373,7 @@ class NeuralNetwork:
                     X_batches = np.array_split(self.X_train, total_batch)
                     Y_batches = np.array_split(self.Y_train, total_batch)
                     
-                    for i in range(total_batch):
-                        batch_x, batch_y = X_batches[i], Y_batches[i]
-
-#                         if a sample is stuttering, multiply the MFCC's to increase the volume
-                        for j in range(len(batch_x)):
-                            temporary_label = batch_y[j][0]
-                            if temporary_label == 1.:
-                                shape_tuple = batch_x[j].shape
-                                batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                                batch_x[j] = batch_x[j].reshape(shape_tuple)
-                                
-                        # Run optimization op (backprop) and cost op (to get loss value)
-                        _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
-
-                        # Compute average loss
-                        avg_cost += c / total_batch
-                    pbar.update(epoch + 1, Cost=avg_cost)
-                
-            logger.info("Optimization Finished!")
-
-            evalAccuracy = self.__getAccuracy()
-            
-            global result 
-            result = tf.argmax(self.model, 1).eval({self.x: self.X_test, self.y: self.Y_test})
-            
-            tfSessionsDir = "tfSessions"
-            if not os.path.isdir(tfSessionsDir):
-                os.makedirs(tfSessionsDir)
-            timestamp = '{:%Y-%m-%d-%H:%M:%S}'.format(datetime.datetime.now()) + '-' + str(evalAccuracy)
-            os.makedirs(os.path.join(tfSessionsDir, timestamp))
-            modelfilename =  os.path.join(os.path.join(tfSessionsDir, timestamp), 'session.ckpt')
-            self.save_path = saver.save(sess, modelfilename)
-            
-            with open(os.path.join(os.path.join(tfSessionsDir, timestamp), 'details.txt'), 'w') as details:
-                details.write("learning_rate = " + str(self.learning_rate) + "\n")
-                details.write("training_epochs = " + str(self.training_epochs) + "\n")
-                details.write("batch_size = " + str(self.batch_size) + "\n")
-                details.write("display_step = " + str(self.display_step) + "\n")
-                details.write("n_hidden = " + str(self.n_hidden) + "\n")
-                details.write("hiddenLayers = " + str(self.hiddenLayers) + "\n")
-                details.write("n_input = " + str(self.n_input) + "\n")
-                details.write("n_classes = " + str(self.n_classes) + "\n")
-                
-            logger.info("Model saved in file: %s" % self.save_path)
-    
-    def getModelPath(self):
-        return self.save_path
-        
-    def __getAccuracy(self):
-        # Test model
-        correct_prediction = tf.equal(tf.argmax(self.model, 1), tf.argmax(self.y, 1))
-        # Calculate accuracy
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-        evalAccuracy = accuracy.eval({self.x: self.X_test, self.y: self.Y_test})
-        logger.info("Accuracy: %f", evalAccuracy)
-        return evalAccuracy
-        
-    def loadAndClassify(self, filename, X):            
-        saver = tf.train.Saver()
-        with tf.Session() as sess:
-            saver.restore(sess, filename)
-            prediction_model = tf.argmax(self.model, 1)
-            return prediction_model.eval({self.x: X})
-            
-
-#%% [markdown]
-# ## Using the NN model for classification
-
-#%%
-class AudioCorrection():
-    def __init__(self, audiofile, tfSessionFile, segmentLength=300, segmentHop=100, n_features=80, correctionsDir='corrections'):
-        self.tfSessionFile = tfSessionFile
-        self.segmentLength = segmentLength
-        self.segmentHop = segmentHop
-        self.n_features = n_features
-        self.correctionsDir = correctionsDir
-        self.samplesPerSegment = None
-        self.samplesToSkipPerHop = None
-        self.upperLimit = None
-        self.inputFilename = None
-        self.y = None
-        self.sr = None
-        self.target_sr = 16000
-        NORMAL = 0
-        STUTTER = 1
-        self.speech = {NORMAL: [], STUTTER: []}
-        self.smoothingSamples = 1000
-        self.__loadfile(audiofile)
-    
-    def __loadfile(self, inputFilename):
-        if not os.path.isfile(inputFilename):
-            logger.error("%s does not exists or is not a file", inputFilename)
-            sys.exit()
-        self.inputFilename = inputFilename
-        logger.info("Loading file %s", self.inputFilename)
-        self.y, self.sr = librosa.load(self.inputFilename)
-        self.samplesPerSegment = int(self.segmentLength * self.sr / 1000)
-        self.samplesToSkipPerHop = int(self.segmentHop * self.sr / 1000)
-        self.upperLimit = len(self.y) - self.samplesPerSegment
-
-    def process(self):
-        logger.info("Attempting to correct %s", self.inputFilename)
-        X = np.empty(shape=(0, self.n_features))
-        durations = np.empty(shape=(0, 2))
-
-        pbar = progressbar.ProgressBar()
-        start = 0
-        end = 0
-#         cycles through frames of input audio
-        for start in pbar(range(0, self.upperLimit, self.samplesToSkipPerHop)):
-            end = start + self.samplesPerSegment
-            audio = self.y[start:end]
-
-            featureVector = self.__getFeatureVector(audio, self.sr)
-            if featureVector != None:
-                X = np.vstack((X, [featureVector]))
-                durations = np.vstack((durations, [start, end]))
-        
-        audio = self.y[end:]
-        featureVector = self.__getFeatureVector(audio, self.sr)
-        if featureVector != None:
-            X = np.vstack((X, [featureVector]))
-            durations = np.vstack((durations, [end, self.upperLimit + self.samplesPerSegment]))
-        logger.debug("Finished extracting features")
-
-        tf.reset_default_graph()
-        nn = NeuralNetwork()
-        classificationResult = nn.loadAndClassify(self.tfSessionFile, X)
-        logger.debug("Finished classification of segments")
-        
-        currentSegment = {'type': classificationResult[0], 'start': durations[0][0], 'end': durations[0][1]}
-        for (label, [start, end]) in zip(classificationResult[1:], durations[1:]):
-            if currentSegment['type'] == label:
-                currentSegment['end'] = end
-            else:
-                self.speech[currentSegment['type']].append((currentSegment['start'], currentSegment['end']))
-                currentSegment['type'] = label
-                currentSegment['start'] = start
-                currentSegment['end'] = end
-    
-    def __getFeatureVector(self, y, sr):
-        try:
-            features = FeatureExtraction()
-            features.load_y_sr(y, sr)
-            features.melspectrogram()
-            features.extractmfcc()
-            features.extractrms()
-        except ValueError:
-            logger.warning("Error extracting features")
-            return None
-
-        featureVector = []
-        for feature in features.mfcc:
-            featureVector.append(np.mean(feature))
-            featureVector.append(np.var(feature))
-
-        for feature in features.delta_mfcc:
-            featureVector.append(np.mean(feature))
-            featureVector.append(np.var(feature))
-
-        for feature in features.delta2_mfcc:
-            featureVector.append(np.mean(feature))
-            featureVector.append(np.var(feature))
-
-        featureVector.append(np.mean(features.rms))
-        featureVector.append(np.var(features.rms))
-        
-        return featureVector
-    
-    def saveCorrectedAudio(self):
-        NORMAL = 0
-        STUTTER = 1
-        if not os.path.isdir(self.correctionsDir):
-            os.makedirs(self.correctionsDir)
-        outputFilenamePrefix = os.path.join(self.correctionsDir, os.path.splitext(os.path.basename(self.inputFilename))[0])
-        
-        normalSpeech = np.ndarray(shape=(1, 0))
-        (start, end) = self.speech[NORMAL][0]
-        normalSpeech = np.append(normalSpeech, self.y[int(start):int(end)])
-        for (start, end) in self.speech[NORMAL][1:]:
-            # Smoothing
-            previousSample = normalSpeech[-1]
-            nextSample = self.y[int(start)]
-            if nextSample > previousSample:
-                low, high = previousSample, nextSample
-            else:
-                low, high = nextSample, previousSample
-            
-            step = (high - low) / self.smoothingSamples
-            
-            normalSpeech = np.append(normalSpeech, np.arange(low, high, step))
-            normalSpeech = np.append(normalSpeech, self.y[int(start):int(end)])
-
-        stutteredSpeech = np.ndarray(shape=(1, 0))
-        for (start, end) in self.speech[STUTTER]:
-            stutteredSpeech = np.append(stutteredSpeech, self.y[int(start):int(end)])
-
-        # Resampling the audio
-        logger.debug("Resampling corrected audio from %d to %d", self.sr, self.target_sr)
-        resampledNormalSpeech = librosa.resample(normalSpeech, self.sr, self.target_sr)
-        resampledStutteredSpeech = librosa.resample(stutteredSpeech, self.sr, self.target_sr)
-        librosa.output.write_wav(outputFilenamePrefix + "-corrected.wav", normalSpeech, self.sr)
-        librosa.output.write_wav(outputFilenamePrefix + "-stuttered.wav", stutteredSpeech, self.sr)
-        
-        wavio.write(outputFilenamePrefix + "-stuttered.wav", normalSpeech, 22000 ,sampwidth=2)
-        
-        logger.info("Corrected audio saved as %s", outputFilenamePrefix + "-corrected.wav")
-        
-#         passes the filename back to the main algorithm to put through speech to text
-        return outputFilenamePrefix + "-stuttered.wav"
-
+        return X_batches, Y_batches
 
 #%%
 def audio_to_text(filepath):
@@ -611,37 +388,117 @@ def audio_to_text(filepath):
 
 #%%
 def run(train=False, correct=False, louder=False):
-    if train:
-        dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
-        X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
+    dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
+    X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
 
-        tf.reset_default_graph()
-        nn = NeuralNetwork(X_train, Y_train, X_test, Y_test)
-        if louder:
-            nn.train(8)
-        if not louder:
-            nn.train(1/8)
+    tf.reset_default_graph()
+    nn = NeuralNetwork(X_train, Y_train, X_test, Y_test)
+    return nn.train(8)
 
-    if correct:
-        audiofile = 'sample.wav'
-        if train:
-            tfSessionFile = nn.getModelPath()
-        else:
-            tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
+#%%
+def invlogamplitude(S):
+    """librosa.logamplitude is actually 10_log10, so invert that."""
+    return 10.0**(S/10.0)
 
-        correction = AudioCorrection(audiofile, tfSessionFile)
-        correction.process()
-        correction_filepath = correction.saveCorrectedAudio()
-        
-        transcription = audio_to_text(correction_filepath)
-        return transcription
+def to_wav(batch):
+    mfccs = batch
+    n_mfcc = mfccs.shape[0]
+    n_mel = 128
+    dctm = librosa.filters.dct(n_mfcc, n_mel)
+    n_fft = 2048
+    mel_basis = librosa.filters.mel(22000, n_fft)
+
+
+    # Empirical scaling of channels to get ~flat amplitude mapping.
+    bin_scaling = 1.0/np.maximum(0.0005, np.sum(np.dot(mel_basis.T, mel_basis),axis=0))
+
+    # Reconstruct the approximate STFT squared-magnitude from the MFCCs.
+    recon_stft = bin_scaling[:, np.newaxis] * np.dot(mel_basis.T,invlogamplitude(np.dot(dctm.T, mfccs)))
+
+    # Impose reconstructed magnitude on white noise STFT.
+    excitation = np.random.randn(y.shape[0])
+    E = librosa.stft(excitation)
+    recon = librosa.istft(E/np.abs(E)*np.sqrt(recon_stft))
+
+    # Output
+    librosa.output.write_wav('from_mfcc.wav', recon, sr)
+
+    plt.style.use('seaborn-darkgrid')
+    plt.figure(1)
+    plt.subplot(211)
+    librosa.display.waveplot(y, sr)
+    plt.subplot(212)
+    librosa.display.waveplot(recon,sr)
+    plt.show()
 
 
 #%%
 if __name__ == "__main__":
-#     using
-    transcription = run(train=False, correct=True, louder=True)
-    
-    print('\n\n', transcription)
-    # training
-    # run(True,False)
+    X_batches, Y_batches = run(True,False)
+    to_wav(X_batches[0])
+    print(X_batches, Y_batches)
+
+
+
+
+
+
+
+
+
+
+
+
+#%%
+"""
+import librosa, librosa.display
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def invlogamplitude(S):
+    # librosa.logamplitude is actually 10_log10, so invert that.
+    return 10.0**(S/10.0)
+
+
+# load
+filename = u'sample.wav'
+y, sr = librosa.load(filename)
+
+
+# calculate mfcc
+Y = librosa.stft(y)
+mfccs = librosa.feature.mfcc(y)
+
+
+# Build reconstruction mappings,
+n_mfcc = mfccs.shape[0]
+n_mel = 128
+dctm = librosa.filters.dct(n_mfcc, n_mel)
+n_fft = 2048
+mel_basis = librosa.filters.mel(sr, n_fft)
+
+
+# Empirical scaling of channels to get ~flat amplitude mapping.
+bin_scaling = 1.0/np.maximum(0.0005, np.sum(np.dot(mel_basis.T, mel_basis),axis=0))
+
+# Reconstruct the approximate STFT squared-magnitude from the MFCCs.
+recon_stft = bin_scaling[:, np.newaxis] * np.dot(mel_basis.T,invlogamplitude(np.dot(dctm.T, mfccs)))
+
+# Impose reconstructed magnitude on white noise STFT.
+excitation = np.random.randn(y.shape[0])
+E = librosa.stft(excitation)
+recon = librosa.istft(E/np.abs(E)*np.sqrt(recon_stft))
+
+
+# Output
+librosa.output.write_wav('output.wav', recon, sr)
+
+plt.style.use('seaborn-darkgrid')
+plt.figure(1)
+plt.subplot(211)
+librosa.display.waveplot(y, sr)
+plt.subplot(212)
+librosa.display.waveplot(recon,sr)
+plt.show()
+"""
