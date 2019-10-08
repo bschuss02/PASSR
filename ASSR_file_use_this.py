@@ -4,21 +4,11 @@
 # # ASSR: Automatic Stuttered Speech Recoginition
 
 #%%
-# import sys
-# !conda install tensorflow
-# !conda activate tensorflow
-# !pip install --upgrade librosa
-# !conda install tqdm
-# !pip install pydub
-# !pip install ffmpeg
-# !pip install SpeechRecognition
-# !pip install wavio
-# !pip install waveread
-
-
-#%%
 from __future__ import print_function, division, absolute_import
 import numpy as np
+
+
+npa = None
 
 import matplotlib.pyplot as plt
 import matplotlib.style as ms
@@ -363,7 +353,7 @@ class NeuralNetwork:
 
         return self.layer[self.hiddenLayers]
     
-    def train(self, volume_coefficient):
+    def train(self, volume_coefficient=1, speed_coefficient=1):
         logger.info("Training the neural network")
         saver = tf.train.Saver()
         with tf.Session() as sess:
@@ -381,31 +371,64 @@ class NeuralNetwork:
                 ' ',
                 progressbar.DynamicMessage('Cost'),
             ]
-            with progressbar.ProgressBar(max_value=self.training_epochs, redirect_stdout=True, widgets=pbarWidgets) as pbar:
-                for epoch in range(self.training_epochs):
-                    avg_cost = 0
-                    total_batch = int(len(self.X_train) / self.batch_size)
-                    X_batches = np.array_split(self.X_train, total_batch)
-                    Y_batches = np.array_split(self.Y_train, total_batch)
-                    
-                    for i in range(total_batch):
-                        batch_x, batch_y = X_batches[i], Y_batches[i]
 
-#                         if a sample is stuttering, multiply the MFCC's to increase the volume
-                        for j in range(len(batch_x)):
-                            temporary_label = batch_y[j][0]
-                            if temporary_label == 1.:
-                                shape_tuple = batch_x[j].shape
-                                batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                                batch_x[j] = batch_x[j].reshape(shape_tuple)
-                                
-                        # Run optimization op (backprop) and cost op (to get loss value)
-                        _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
+            if volume_coefficient != 1:
+                with progressbar.ProgressBar(max_value=self.training_epochs, redirect_stdout=True, widgets=pbarWidgets) as pbar:
+                    for epoch in range(self.training_epochs):
+                        avg_cost = 0
+                        total_batch = int(len(self.X_train) / self.batch_size)
+                        X_batches = np.array_split(self.X_train, total_batch)
+                        Y_batches = np.array_split(self.Y_train, total_batch)
+                        
+                        for i in range(total_batch):
+                            batch_x, batch_y = X_batches[i], Y_batches[i]
 
-                        # Compute average loss
-                        avg_cost += c / total_batch
-                    pbar.update(epoch + 1, Cost=avg_cost)
-                
+    #                         if a sample is stuttering, multiply the MFCC's to increase the volume
+                            for j in range(len(batch_x)):
+                                temporary_label = batch_y[j][0]
+                                if temporary_label == 1.:
+                                    shape_tuple = batch_x[j].shape
+                                    batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
+                                    batch_x[j] = batch_x[j].reshape(shape_tuple)
+                                    
+                            # Run optimization op (backprop) and cost op (to get loss value)
+                            _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
+
+                            # Compute average loss
+                            avg_cost += c / total_batch
+                        pbar.update(epoch + 1, Cost=avg_cost)
+
+            elif speed_coefficient != 1:
+                with progressbar.ProgressBar(max_value=self.training_epochs, redirect_stdout=True, widgets=pbarWidgets) as pbar:
+                    for epoch in range(self.training_epochs):
+                        avg_cost = 0
+                        total_batch = int(len(self.X_train) / self.batch_size)
+                        X_batches = np.array_split(self.X_train, total_batch)
+                        Y_batches = np.array_split(self.Y_train, total_batch)
+                        
+                        for i in range(total_batch):
+                            batch_x, batch_y = X_batches[i], Y_batches[i]
+
+    #                         if a sample is stuttering, duplicate each vector in the array to make it twice as long
+                            for j in range(len(batch_x)):
+                                temporary_label = batch_y[j][0]
+                                if temporary_label == 1.:
+                                    npa = batch_x[j]
+                                    # shape_list = list(batch_x[j].shape)
+                                    # shape_list[0] *= 2
+                                    
+                                    # shape_tuple = tuple(shape_list)
+                                    # batch_x[j] = batch_x[j].reshape(shape_tuple)
+                                    # batch_x[j] = np.repeat(list(batch_x[j]),int(speed_coefficient))
+                                    # print(batch_x[j])
+                                    
+                            # Run optimization op (backprop) and cost op (to get loss value)
+                            _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
+
+                            # Compute average loss
+                            avg_cost += c / total_batch
+                        pbar.update(epoch + 1, Cost=avg_cost)
+
             logger.info("Optimization Finished!")
 
             evalAccuracy = self.__getAccuracy()
@@ -614,17 +637,19 @@ def audio_to_text(filepath):
 
 
 #%%
-def run(train=False, correct=False, louder=False):
+def run(train=False, correct=False, mode="QUIETER"):
     if train:
         dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
         X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
 
         tf.reset_default_graph()
         nn = NeuralNetwork(X_train, Y_train, X_test, Y_test)
-        if louder:
-            nn.train(8)
-        if not louder:
-            nn.train(1/8)
+        if mode == "LOUDER":
+            nn.train(volume_coefficient=8)
+        if mode == "QUIETER":
+            nn.train(volume_coefficient=1/8)
+        if mode == "SLOWER":
+            nn.train(speed_coefficient=2)
 
     if correct:
         record()
@@ -632,7 +657,12 @@ def run(train=False, correct=False, louder=False):
         if train:
             tfSessionFile = nn.getModelPath()
         else:
-            tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
+            if mode == "LOUDER":
+                tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
+            elif mode == "QUIETER":
+                tfSessionFile = 'tfSessions/2019-10-08-09:20:24-0.40834475/session.ckpt'
+            elif mode == "SLOWER":
+                tfSessionFile = 'tfSessions/2019-10-08-09:20:24-0.40834475/session.ckpt'
 
         correction = AudioCorrection(audiofile, tfSessionFile)
         correction.process()
@@ -650,7 +680,7 @@ def record():
     FORMAT = pyaudio.paInt16
     CHANNELS = 2
     RATE = 44100
-    RECORD_SECONDS = 5
+    RECORD_SECONDS = 7
     WAVE_OUTPUT_FILENAME = "recorded_input.wav"
 
     p = pyaudio.PyAudio()
@@ -685,10 +715,7 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=False, correct=True, louder=True)
-    
+    transcription = run(train=True, correct=False, mode="QUIETER")
     print('\n\n', transcription)
-    # training
-    # run(True,False)
 
 #%%
