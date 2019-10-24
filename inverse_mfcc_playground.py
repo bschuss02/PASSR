@@ -40,7 +40,7 @@ recon = librosa.istft(E/np.abs(E)*np.sqrt(recon_stft))
 
 #%%
 # Output
-librosa.output.write_wav('output_inverse_mfcc.wav', recon, sr)
+librosa.output.write_wav('output.wav', recon, sr)
 
 plt.style.use('seaborn-darkgrid')
 plt.figure(1)
