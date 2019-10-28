@@ -1,3 +1,4 @@
+#%%
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
@@ -204,7 +205,7 @@ class Dataset:
 
 
 
-
+#%%
 dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
 X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
 
@@ -212,14 +213,16 @@ total_batch = int(len(X_train) / 100)
 X_batches = np.array_split(X_train, total_batch)
 Y_batches = np.array_split(Y_train, total_batch)
 
-volume_coefficient = 1/8
-
 for i in range(total_batch):
-    batch_x, batch_y = X_batches[i], Y_batches[i]
+    temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
+    batch_x = []
+    for i in range(total_batch):
+        # print(X_batches[0][0])
+        temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
 
-    for j in range(len(batch_x)):
-        temporary_label = batch_y[j][0]
-        if temporary_label == 1.:
-            shape_tuple = batch_x[j].shape
-            batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-            batch_x[j] = batch_x[j].reshape(shape_tuple)
+        for j in range(len(temp_batch_x)):
+            temporary_label = temp_batch_y[j][0]
+            if temporary_label == 1.:
+                batch_x.append(np.repeat(temp_batch_x[j],2))
+    np_batch_x = np.array(batch_x)
+    
