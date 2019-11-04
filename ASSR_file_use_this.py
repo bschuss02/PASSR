@@ -3,18 +3,6 @@
 #%% [markdown]
 # # ASSR: Automatic Stuttered Speech Recoginition
 
-#%%
-# import sys
-# !conda install tensorflow
-# !conda activate tensorflow
-# !pip install --upgrade librosa
-# !conda install tqdm
-# !pip install pydub
-# !pip install ffmpeg
-# !pip install SpeechRecognition
-# !pip install wavio
-# !pip install waveread
-
 
 #%%
 from __future__ import print_function, division, absolute_import
@@ -363,75 +351,151 @@ class NeuralNetwork:
 
         return self.layer[self.hiddenLayers]
     
-    def train(self, volume_coefficient):
-        logger.info("Training the neural network")
-        saver = tf.train.Saver()
-        with tf.Session() as sess:
-            sess.run(self.init)
-            pbarWidgets = [
-                progressbar.Percentage(),
-                ' (',
-                progressbar.SimpleProgress(),
-                ') ',
-                progressbar.Bar(),
-                ' ',
-                progressbar.Timer(),
-                ' ',
-                progressbar.ETA(),
-                ' ',
-                progressbar.DynamicMessage('Cost'),
-            ]
-            with progressbar.ProgressBar(max_value=self.training_epochs, redirect_stdout=True, widgets=pbarWidgets) as pbar:
-                for epoch in range(self.training_epochs):
-                    avg_cost = 0
-                    total_batch = int(len(self.X_train) / self.batch_size)
-                    X_batches = np.array_split(self.X_train, total_batch)
-                    Y_batches = np.array_split(self.Y_train, total_batch)
+    def train(self, volume_coefficient, speed_coefficient):
+        if speed_coefficient == 1:
+            logger.info("Training the neural network")
+            saver = tf.train.Saver()
+            with tf.Session() as sess:
+                sess.run(self.init)
+                pbarWidgets = [
+                    progressbar.Percentage(),
+                    ' (',
+                    progressbar.SimpleProgress(),
+                    ') ',
+                    progressbar.Bar(),
+                    ' ',
+                    progressbar.Timer(),
+                    ' ',
+                    progressbar.ETA(),
+                    ' ',
+                    progressbar.DynamicMessage('Cost'),
+                ]
+                with progressbar.ProgressBar(max_value=self.training_epochs, redirect_stdout=True, widgets=pbarWidgets) as pbar:
+                    for epoch in range(self.training_epochs):
+                        avg_cost = 0
+                        total_batch = int(len(self.X_train) / self.batch_size)
+                        X_batches = np.array_split(self.X_train, total_batch)
+                        Y_batches = np.array_split(self.Y_train, total_batch)
+                        
+                        for i in range(total_batch):
+                            batch_x, batch_y = X_batches[i], Y_batches[i]
+
+    #                         if a sample is stuttering, multiply the MFCC's to increase the volume
+                            for j in range(len(batch_x)):
+                                temporary_label = batch_y[j][0]
+                                if temporary_label == 1.:
+                                    shape_tuple = batch_x[j].shape
+                                    batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
+                                    batch_x[j] = batch_x[j].reshape(shape_tuple)
+                                    
+                            # Run optimization op (backprop) and cost op (to get loss value)
+                            _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
+
+                            # Compute average loss
+                            avg_cost += c / total_batch
+                        pbar.update(epoch + 1, Cost=avg_cost)
                     
-                    for i in range(total_batch):
-                        batch_x, batch_y = X_batches[i], Y_batches[i]
+                logger.info("Optimization Finished!")
 
-#                         if a sample is stuttering, multiply the MFCC's to increase the volume
-                        for j in range(len(batch_x)):
-                            temporary_label = batch_y[j][0]
-                            if temporary_label == 1.:
-                                shape_tuple = batch_x[j].shape
-                                batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                                batch_x[j] = batch_x[j].reshape(shape_tuple)
-                                
-                        # Run optimization op (backprop) and cost op (to get loss value)
-                        _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
-
-                        # Compute average loss
-                        avg_cost += c / total_batch
-                    pbar.update(epoch + 1, Cost=avg_cost)
+                evalAccuracy = self.__getAccuracy()
                 
-            logger.info("Optimization Finished!")
 
-            evalAccuracy = self.__getAccuracy()
-            
-            global result 
-            result = tf.argmax(self.model, 1).eval({self.x: self.X_test, self.y: self.Y_test})
-            
-            tfSessionsDir = "tfSessions"
-            if not os.path.isdir(tfSessionsDir):
-                os.makedirs(tfSessionsDir)
-            timestamp = '{:%Y-%m-%d-%H:%M:%S}'.format(datetime.datetime.now()) + '-' + str(evalAccuracy)
-            os.makedirs(os.path.join(tfSessionsDir, timestamp))
-            modelfilename =  os.path.join(os.path.join(tfSessionsDir, timestamp), 'session.ckpt')
-            self.save_path = saver.save(sess, modelfilename)
-            
-            with open(os.path.join(os.path.join(tfSessionsDir, timestamp), 'details.txt'), 'w') as details:
-                details.write("learning_rate = " + str(self.learning_rate) + "\n")
-                details.write("training_epochs = " + str(self.training_epochs) + "\n")
-                details.write("batch_size = " + str(self.batch_size) + "\n")
-                details.write("display_step = " + str(self.display_step) + "\n")
-                details.write("n_hidden = " + str(self.n_hidden) + "\n")
-                details.write("hiddenLayers = " + str(self.hiddenLayers) + "\n")
-                details.write("n_input = " + str(self.n_input) + "\n")
-                details.write("n_classes = " + str(self.n_classes) + "\n")
+                result = tf.argmax(self.model, 1).eval({self.x: self.X_test, self.y: self.Y_test})
                 
-            logger.info("Model saved in file: %s" % self.save_path)
+                tfSessionsDir = "tfSessions"
+                if not os.path.isdir(tfSessionsDir):
+                    os.makedirs(tfSessionsDir)
+                timestamp = '{:%Y-%m-%d-%H:%M:%S}'.format(datetime.datetime.now()) + '-' + str(evalAccuracy)
+                os.makedirs(os.path.join(tfSessionsDir, timestamp))
+                modelfilename =  os.path.join(os.path.join(tfSessionsDir, timestamp), 'session.ckpt')
+                self.save_path = saver.save(sess, modelfilename)
+                
+                with open(os.path.join(os.path.join(tfSessionsDir, timestamp), 'details.txt'), 'w') as details:
+                    details.write("learning_rate = " + str(self.learning_rate) + "\n")
+                    details.write("training_epochs = " + str(self.training_epochs) + "\n")
+                    details.write("batch_size = " + str(self.batch_size) + "\n")
+                    details.write("display_step = " + str(self.display_step) + "\n")
+                    details.write("n_hidden = " + str(self.n_hidden) + "\n")
+                    details.write("hiddenLayers = " + str(self.hiddenLayers) + "\n")
+                    details.write("n_input = " + str(self.n_input) + "\n")
+                    details.write("n_classes = " + str(self.n_classes) + "\n")
+                    
+                logger.info("Model saved in file: %s" % self.save_path)
+
+        # end if speed_coefficient == 1
+
+        elif speed_coefficient != 1:
+            logger.info("Training the neural network")
+            saver = tf.train.Saver()
+            with tf.Session() as sess:
+                sess.run(self.init)
+                pbarWidgets = [
+                    progressbar.Percentage(),
+                    ' (',
+                    progressbar.SimpleProgress(),
+                    ') ',
+                    progressbar.Bar(),
+                    ' ',
+                    progressbar.Timer(),
+                    ' ',
+                    progressbar.ETA(),
+                    ' ',
+                    progressbar.DynamicMessage('Cost'),
+                ]
+                with progressbar.ProgressBar(max_value=self.training_epochs, widgets=pbarWidgets) as pbar:
+                    for epoch in range(self.training_epochs):
+                        avg_cost = 0
+                        total_batch = int(len(self.X_train) / self.batch_size)
+                        X_batches = np.array_split(self.X_train, total_batch)
+                        Y_batches = np.array_split(self.Y_train, total_batch)
+                        
+                        for i in range(total_batch):
+                            batch_x, batch_y = X_batches[i], Y_batches[i]
+                            ls_batch_x = []
+                            for i in range(total_batch):
+                                # print(X_batches[0][0])
+                                temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
+
+                                for j in range(len(temp_batch_x)):
+                                    temporary_label = temp_batch_y[j][0]
+                                    if temporary_label == 1.:
+                                        ls_batch_x.append(np.repeat(temp_batch_x[j],2))
+                            batch_x = np.array(ls_batch_x)
+
+                            # Run optimization op (backprop) and cost op (to get loss value)
+                            _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
+
+                            # Compute average loss
+                            avg_cost += c / total_batch
+                        pbar.update(epoch + 1, Cost=avg_cost)
+                    
+                logger.info("Optimization Finished!")
+
+                evalAccuracy = self.__getAccuracy()
+                
+                result = tf.argmax(self.model, 1).eval({self.x: self.X_test, self.y: self.Y_test})
+                
+                tfSessionsDir = "tfSessions"
+                if not os.path.isdir(tfSessionsDir):
+                    os.makedirs(tfSessionsDir)
+                timestamp = '{:%Y-%m-%d-%H:%M:%S}'.format(datetime.datetime.now()) + '-' + str(evalAccuracy)
+                os.makedirs(os.path.join(tfSessionsDir, timestamp))
+                modelfilename =  os.path.join(os.path.join(tfSessionsDir, timestamp), 'session.ckpt')
+                self.save_path = saver.save(sess, modelfilename)
+                
+                with open(os.path.join(os.path.join(tfSessionsDir, timestamp), 'details.txt'), 'w') as details:
+                    details.write("learning_rate = " + str(self.learning_rate) + "\n")
+                    details.write("training_epochs = " + str(self.training_epochs) + "\n")
+                    details.write("batch_size = " + str(self.batch_size) + "\n")
+                    details.write("display_step = " + str(self.display_step) + "\n")
+                    details.write("n_hidden = " + str(self.n_hidden) + "\n")
+                    details.write("hiddenLayers = " + str(self.hiddenLayers) + "\n")
+                    details.write("n_input = " + str(self.n_input) + "\n")
+                    details.write("n_classes = " + str(self.n_classes) + "\n")
+                    
+                logger.info("Model saved in file: %s" % self.save_path)
+        
+
     
     def getModelPath(self):
         return self.save_path
@@ -614,25 +678,35 @@ def audio_to_text(filepath):
 
 
 #%%
-def run(train=False, correct=False, louder=False):
+def run(train=False, correct=False, mode="NORMAL"):
     if train:
         dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
         X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
 
         tf.reset_default_graph()
         nn = NeuralNetwork(X_train, Y_train, X_test, Y_test)
-        if louder:
-            nn.train(8)
-        if not louder:
-            nn.train(1/8)
+
+        if mode == "LOUDER":
+            nn.train(8,1)
+        elif mode == "QUIETER":
+            nn.train(1/8,1)
+        elif mode == "SLOWER":
+            nn.train(1,2)
+        elif mode == "NORMAL":
+            nn.train(1,1)
+            
 
     if correct:
         record()
         audiofile = 'recorded_input.wav'
-        if train:
-            tfSessionFile = nn.getModelPath()
-        else:
+        if mode == "NORMAL":
+            pass
+        elif mode == "LOUDER":
             tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
+        elif mode == "QUIETER":
+            pass
+        elif mode == "SLOWER":
+            pass
 
         correction = AudioCorrection(audiofile, tfSessionFile)
         correction.process()
@@ -685,10 +759,8 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=False, correct=True, louder=True)
+    transcription = run(train=True, correct=False, mode="LOUDER")
     
     print('\n\n', transcription)
     # training
     # run(True,False)
-
-#%%

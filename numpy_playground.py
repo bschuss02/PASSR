@@ -225,4 +225,3 @@ for i in range(total_batch):
             if temporary_label == 1.:
                 batch_x.append(np.repeat(temp_batch_x[j],2))
     np_batch_x = np.array(batch_x)
-    
