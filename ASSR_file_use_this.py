@@ -3,6 +3,9 @@
 #%% [markdown]
 # # ASSR: Automatic Stuttered Speech Recoginition
 
+#%% [markdown]
+# ## instructions: open this as a vscode python file, don't use jupyter. There's a bug that I can't figure out that says progressbar is not callable so training doesn't work now
+
 
 #%%
 from __future__ import print_function, division, absolute_import

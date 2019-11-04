@@ -1,3 +1,8 @@
+"""
+this makes a sample array of training data so that we can modify it to play around with it.
+right now it doubles each sound vector to simulate speaking twice as slowly
+"""
+
 #%%
 from __future__ import print_function, division, absolute_import
 import numpy as np
@@ -36,6 +41,67 @@ handler = logging.StreamHandler()
 handler.setFormatter(colorlog.ColoredFormatter('%(log_color)s%(levelname)-8s| %(message)s'))
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+class FeatureExtraction:
+    def __init__(self, n_mels=128):
+        self.n_mels = n_mels
+        self.y = None
+        self.sr = None
+        self.S = None
+        self.log_S = None
+        self.mfcc = None
+        self.delta_mfcc = None
+        self.delta2_mfcc = None
+        self.M = None
+        self.rms = None
+    
+    def loadFile(self, filename):
+        self.y, self.sr = librosa.load(filename)
+        logger.debug('File loaded: %s', filename)
+    
+    def load_y_sr(self, y, sr):
+        self.y = y
+        self.sr = sr
+    
+    def melspectrogram(self):
+        self.S = librosa.feature.melspectrogram(self.y, sr=self.sr, n_mels=self.n_mels)
+        self.log_S = librosa.amplitude_to_db(self.S, ref=np.max)
+    
+    def plotmelspectrogram(self):
+        plt.figure(figsize=(12, 4))
+        librosa.display.specshow(self.log_S, sr=self.sr, x_axis='time', y_axis='mel')
+        plt.title('mel Power Spectrogram')
+        plt.colorbar(format='%+02.0f dB')
+        plt.tight_layout()
+    
+    def extractmfcc(self, n_mfcc=13):
+        self.mfcc = librosa.feature.mfcc(S=self.log_S, n_mfcc=n_mfcc)
+#         self.delta_mfcc = librosa.feature.delta(self.mfcc)
+        self.delta_mfcc = librosa.feature.delta(self.mfcc,mode='nearest')
+        self.delta2_mfcc = librosa.feature.delta(self.mfcc, order=2,mode='nearest')
+        self.M = np.vstack([self.mfcc, self.delta_mfcc, self.delta2_mfcc])
+    
+    def plotmfcc(self):
+        plt.figure(figsize=(12, 6))
+        plt.subplot(3, 1, 1)
+        librosa.display.specshow(self.mfcc)
+        plt.ylabel('MFCC')
+        plt.colorbar()
+        
+        plt.subplot(3, 1, 2)
+        librosa.display.specshow(self.delta_mfcc)
+        plt.ylabel('MFCC-$\Delta$')
+        plt.colorbar()
+        
+        plt.subplot(3, 1, 3)
+        librosa.display.specshow(self.delta2_mfcc, sr=self.sr, x_axis='time')
+        plt.ylabel('MFCC-$\Delta^2$')
+        plt.colorbar()
+        
+        plt.tight_layout()
+    
+    def extractrms(self):
+        self.rms = librosa.feature.rms(y=self.y)
 
 class Dataset:
     def __init__(self, datasetDir, datasetLabelFilename, datasetArrayFilename):

@@ -1,3 +1,11 @@
+"""
+this only works with libros 2.0
+to fix this, type the terminal commands:
+pip uninstall librosa
+pip install librosa==2.0.0
+"""
+
+
 #%%
 import librosa, librosa.display #Different version of Librosa
 import numpy as np
