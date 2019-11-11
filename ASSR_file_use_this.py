@@ -1,10 +1,15 @@
 # To add a new cell, type '#%%'
 # To add a new markdown cell, type '#%% [markdown]'
 #%% [markdown]
-# # ASSR: Automatic Stuttered Speech Recoginition
+# # PASSR: Personalized Automatic Stuttered Speech Recoginition
 
 #%% [markdown]
 # ## instructions: open this as a vscode python file, don't use jupyter. There's a bug that I can't figure out that says progressbar is not callable so training doesn't work now
+
+#%%
+# pip uninstall progressbar
+# pip install progressbar2
+
 
 
 #%%
@@ -762,7 +767,7 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=True, correct=False, mode="LOUDER")
+    transcription = run(train=True, correct=False, mode="SLOWER")
     
     print('\n\n', transcription)
     # training
