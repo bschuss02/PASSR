@@ -69,3 +69,15 @@ S = librosa.feature.melspectrogram(audio, sr=RATE)
 audio=np.frombuffer(stream.read(CHUNK),dtype=np.int16)
 S = librosa.feature.melspectrogram(audio.astype('float32'), sr=RATE)
 """
+
+
+
+
+"""
+Bookmarks
+
+1: run() function call
+2: tfSessionFile model
+3: 
+
+"""
