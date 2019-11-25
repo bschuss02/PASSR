@@ -3,8 +3,6 @@
 #%% [markdown]
 # # PASSR: Personalized Automatic Stuttered Speech Recoginition
 
-#%% [markdown]
-# ## instructions: open this as a vscode python file, don't use jupyter. There's a bug that I can't figure out that says progressbar is not callable so training doesn't work now
 
 #%%
 # pip uninstall progressbar
@@ -708,13 +706,13 @@ def run(train=False, correct=False, mode="NORMAL"):
         record()
         audiofile = 'recorded_input.wav'
         if mode == "NORMAL":
-            pass
+            tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
         elif mode == "LOUDER":
             tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
         elif mode == "QUIETER":
-            pass
+            tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
         elif mode == "SLOWER":
-            pass
+            tfSessionFile = 'tfSessions/ampified_by_10.8511172/session.ckpt'
 
         correction = AudioCorrection(audiofile, tfSessionFile)
         correction.process()
@@ -767,8 +765,11 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=True, correct=False, mode="SLOWER")
+    transcription = run(train=False, correct=True, mode="NORMAL")
     
     print('\n\n', transcription)
     # training
     # run(True,False)
+
+
+# %%
