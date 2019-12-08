@@ -5,12 +5,6 @@
 
 
 #%%
-# pip uninstall progressbar
-# pip install progressbar2
-
-
-
-#%%
 from __future__ import print_function, division, absolute_import
 import numpy as np
 
@@ -403,7 +397,7 @@ class NeuralNetwork:
                     
                 logger.info("Optimization Finished!")
 
-                evalAccuracy = self.__getAccuracy()
+                evalAccuracy = self.__getAccuracy(volume_coefficient)
                 
 
                 result = tf.argmax(self.model, 1).eval({self.x: self.X_test, self.y: self.Y_test})
@@ -506,11 +500,33 @@ class NeuralNetwork:
     def getModelPath(self):
         return self.save_path
         
-    def __getAccuracy(self):
+    def __getAccuracy(self, volume_coefficient):
         # Test model
         correct_prediction = tf.equal(tf.argmax(self.model, 1), tf.argmax(self.y, 1))
         # Calculate accuracy
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+
+        # modify mfcc vectors for self.X_test
+        total_batch = int(len(self.X_test) / self.batch_size)
+        X_batches = np.array_split(self.X_test, total_batch)
+        Y_batches = np.array_split(self.Y_test, total_batch)
+        
+        print(self.X_test)
+
+        for i in range(total_batch):
+            batch_x, batch_y = X_batches[i], Y_batches[i]
+
+            for j in range(len(batch_x)):
+                temporary_label = batch_y[j][0]
+                if temporary_label == 1.:
+                    shape_tuple = batch_x[j].shape
+                    batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
+                    batch_x[j] = batch_x[j].reshape(shape_tuple)
+
+        self.X_test = np.concatenate(X_batches)
+        print(self.X_test)
+        
+
         evalAccuracy = accuracy.eval({self.x: self.X_test, self.y: self.Y_test})
         logger.info("Accuracy: %f", evalAccuracy)
         return evalAccuracy
@@ -688,6 +704,10 @@ def run(train=False, correct=False, mode="NORMAL"):
     if train:
         dataset = Dataset('dataset', 'datasetLabels.txt', 'datasetArray80.gz')
         X_train, X_test, Y_train, Y_test = train_test_split(dataset.X, dataset.Y)
+        print("X_test size",len(X_test))
+        print("X_train size", len(X_train))
+        print("Y_train size",len(Y_train))
+        print("Y_test size",len(Y_test))
 
         tf.reset_default_graph()
         nn = NeuralNetwork(X_train, Y_train, X_test, Y_test)
@@ -765,7 +785,7 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=False, correct=True, mode="NORMAL")
+    transcription = run(train=True, correct=False, mode="LOUDER")
     
     print('\n\n', transcription)
     # training

@@ -78,6 +78,7 @@ Bookmarks
 
 1: run() function call
 2: tfSessionFile model
-3: 
+3: vector volume multiplication
+4: accuracy test block
 
 """
