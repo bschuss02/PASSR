@@ -507,7 +507,7 @@ class NeuralNetwork:
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
         # modify mfcc vectors for self.X_test
-        total_batch = int(len(self.X_test) / self.batch_size)
+        total_batch = int(len(self.X_test) / (self.batch_size * .75))
         X_batches = np.array_split(self.X_test, total_batch)
         Y_batches = np.array_split(self.Y_test, total_batch)
         
