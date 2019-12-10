@@ -384,9 +384,10 @@ class NeuralNetwork:
                             for j in range(len(batch_x)):
                                 temporary_label = batch_y[j][0]
                                 if temporary_label == 1.:
-                                    shape_tuple = batch_x[j].shape
-                                    batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                                    batch_x[j] = batch_x[j].reshape(shape_tuple)
+                                    batch_x[j] *= volume_coefficient
+                                    # shape_tuple = batch_x[j].shape
+                                    # batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
+                                    # batch_x[j] = batch_x[j].reshape(shape_tuple)
                                     
                             # Run optimization op (backprop) and cost op (to get loss value)
                             _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
@@ -519,9 +520,10 @@ class NeuralNetwork:
             for j in range(len(batch_x)):
                 temporary_label = batch_y[j][0]
                 if temporary_label == 1.:
-                    shape_tuple = batch_x[j].shape
-                    batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                    batch_x[j] = batch_x[j].reshape(shape_tuple)
+                    batch_x[j] *= volume_coefficient
+                    # shape_tuple = batch_x[j].shape
+                    # batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
+                    # batch_x[j] = batch_x[j].reshape(shape_tuple)
 
         self.X_test = np.concatenate(X_batches)
         print(self.X_test)
