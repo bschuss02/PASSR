@@ -390,6 +390,7 @@ class NeuralNetwork:
                                     # batch_x[j] = batch_x[j].reshape(shape_tuple)
                                     
                             # Run optimization op (backprop) and cost op (to get loss value)
+                            # print("HERE, FUCKO", batch_x.shape)
                             _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
 
                             # Compute average loss
@@ -451,24 +452,31 @@ class NeuralNetwork:
                         Y_batches = np.array_split(self.Y_train, total_batch)
                         
                         for i in range(total_batch):
-                            batch_x, batch_y = X_batches[i], Y_batches[i]
-                            ls_batch_x = []
-                            for i in range(total_batch):
-                                # print(X_batches[0][0])
-                                temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
+                            # print(X_batches[0][0])
+                            temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
+                            batch_x = np.empty((0,80))
+                            batch_y = np.empty((0,2))
+                            for j in range(len(temp_batch_x)):
+                                temporary_label = temp_batch_y[j][0]
+                                if temporary_label == 1.:
+                                    first_half = np.repeat(temp_batch_x[j][:40],2)
+                                    second_half = np.repeat(temp_batch_x[j][40:],2)
+                                    batch_x = np.vstack((batch_x, first_half))
+                                    batch_x = np.vstack((batch_x, second_half))
 
-                                for j in range(len(temp_batch_x)):
-                                    temporary_label = temp_batch_y[j][0]
-                                    if temporary_label == 1.:
-                                        ls_batch_x.append(np.repeat(temp_batch_x[j],2))
-                            batch_x = np.array(ls_batch_x)
+                                    batch_y = np.vstack((batch_y, temp_batch_y[j]))
+                                    batch_y = np.vstack((batch_y, temp_batch_y[j]))
+                                else:
+                                    adding = np.repeat(temp_batch_x[j][:40],2)
+                                    batch_x = np.vstack((batch_x, adding))
+                                    batch_y = np.vstack((batch_y, temp_batch_y[j]))
 
                             # Run optimization op (backprop) and cost op (to get loss value)
                             _, c = sess.run([self.optimizer, self.cost], feed_dict={self.x: batch_x, self.y: batch_y})
 
-                            # Compute average loss
-                            avg_cost += c / total_batch
-                        pbar.update(epoch + 1, Cost=avg_cost)
+                        # Compute average loss
+                        avg_cost += c / total_batch
+                    pbar.update(epoch + 1, Cost=avg_cost)
                     
                 logger.info("Optimization Finished!")
 
@@ -507,39 +515,30 @@ class NeuralNetwork:
         # Calculate accuracy
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
-        # modify mfcc vectors for self.X_test
-        total_batch = int(len(self.X_test) / (self.batch_size * .75))
-        X_batches = np.array_split(self.X_test, total_batch)
-        Y_batches = np.array_split(self.Y_test, total_batch)
         
+        print(self.Y_test)
         print(self.X_test)
 
-        for i in range(total_batch):
-            batch_x, batch_y = X_batches[i], Y_batches[i]
+        for i in range(self.X_test.shape[0]):
+            frame_x = self.X_test[i]
+            frame_y = self.Y_test[i]
+            temporary_label = frame_y[0]
+            if temporary_label == 1.:
+                frame_x *= volume_coefficient
 
-            for j in range(len(batch_x)):
-                temporary_label = batch_y[j][0]
-                if temporary_label == 1.:
-                    batch_x[j] *= volume_coefficient
-                    # shape_tuple = batch_x[j].shape
-                    # batch_x[j] = np.array(list(map(lambda x: x * volume_coefficient, batch_x[j])))
-                    # batch_x[j] = batch_x[j].reshape(shape_tuple)
-
-        self.X_test = np.concatenate(X_batches)
+        print(self.Y_test)
         print(self.X_test)
         
-
         evalAccuracy = accuracy.eval({self.x: self.X_test, self.y: self.Y_test})
         logger.info("Accuracy: %f", evalAccuracy)
         return evalAccuracy
         
-    def loadAndClassify(self, filename, X):            
+    def loadAndClassify(self, filename, X):           
         saver = tf.train.Saver()
         with tf.Session() as sess:
             saver.restore(sess, filename)
             prediction_model = tf.argmax(self.model, 1)
             return prediction_model.eval({self.x: X})
-            
 
 #%% [markdown]
 # ## Using the NN model for classification
@@ -787,11 +786,9 @@ def record():
 #%%
 if __name__ == "__main__":
 #     using
-    transcription = run(train=True, correct=False, mode="LOUDER")
+    transcription = run(train=True, correct=False, mode="SLOWER")
     
     print('\n\n', transcription)
     # training
     # run(True,False)
 
-
-# %%
