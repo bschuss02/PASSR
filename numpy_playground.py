@@ -282,16 +282,24 @@ Y_batches = np.array_split(Y_train, total_batch)
 
 for i in range(total_batch):
     # print(X_batches[0][0])
-    temp_batch_x, batch_y = X_batches[i], Y_batches[i]
+    temp_batch_x, temp_batch_y = X_batches[i], Y_batches[i]
     batch_x = np.empty((0,80))
+    batch_y = np.empty((0,2))
     for j in range(len(temp_batch_x)):
-        temporary_label = batch_y[j][0]
+        temporary_label = temp_batch_y[j][0]
         if temporary_label == 1.:
             first_half = np.repeat(temp_batch_x[j][:40],2)
             second_half = np.repeat(temp_batch_x[j][40:],2)
             batch_x = np.vstack((batch_x, first_half))
             batch_x = np.vstack((batch_x, second_half))
+
+            batch_y = np.vstack((batch_y, temp_batch_y[j]))
+            batch_y = np.vstack((batch_y, temp_batch_y[j]))
         else:
             adding = np.repeat(temp_batch_x[j][:40],2)
             batch_x = np.vstack((batch_x, adding))
+            batch_y = np.vstack((batch_y, temp_batch_y[j]))
 
+
+
+# %%
